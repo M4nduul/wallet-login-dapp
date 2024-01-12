@@ -9,15 +9,11 @@ dotenv.config();
 const app = express();
 const port = process.env.EXPRESS_SERVER_PORT
 
-// middleware for json parsing
 app.use(express.json());
-
-// middleware for allow cross origin request
 app.use(cors());
-
 app.use('/api', services);
 
-sequelize.sync().then(result => {
+sequelize.sync().then(() => {
 	console.log('DB connected')
 	app.listen(port, () =>
 		console.log(`Application is running on :${port}`)

@@ -1,11 +1,12 @@
 import './Component.css'
 import React, { useState } from 'react';
 import Web3 from 'web3';
+import axios from 'axios';
 
 import { Auth } from '../types';
 
 interface ILogin {
-    onLoggedIn: (auth: Auth) => void;
+    onLoggedIn: (user: Auth) => void;
 }
 
 const API = process.env.REACT_APP_BACKEND_URL
@@ -16,21 +17,25 @@ export const Login = ({ onLoggedIn }: ILogin) => {
 
     const [loading, setLoading] = useState(false);
 
-    const handleAuthenticate = ({
-        publicAddress,
-        signature,
-    }: {
-        publicAddress: any;
-        signature: any;
-    }) =>
-        fetch(`${API}/auth`, {
-            body: JSON.stringify({ publicAddress, signature }),
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            method: 'POST',
-        }).then((response) => response.json());
 
+    const handleAuthenticate = async ({ publicAddress, signature }: { publicAddress: any; signature: any }) => {
+      try {
+        const response = await axios.post(
+          `${API}/auth`,
+          { publicAddress, signature },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+    
+        return response.data;
+      } catch (err: any) {
+        throw new Error(err.response?.data?.message || 'Error during authentication');
+      }
+    };
+    
     const handleSignMessage = async ({
         publicAddress,
         nonce,
@@ -53,15 +58,23 @@ export const Login = ({ onLoggedIn }: ILogin) => {
         }
     };
 
-    const handleSignup = (publicAddress: string) =>
-        fetch(`${API}/users`, {
-            body: JSON.stringify({ publicAddress }),
-            headers: {
+    const handleSignup = async (publicAddress: string) => {
+        try {
+          const response = await axios.post(
+            `${API}/users`,
+            { publicAddress },
+            {
+              headers: {
                 'Content-Type': 'application/json',
-            },
-            method: 'POST',
-        }).then((response) => response.json());
-
+              },
+            }
+          );
+      
+          return response.data;
+        } catch (err: any) {
+          throw new Error(err.response?.data?.message || 'Error during signup');
+        }
+      };
     const handleClick = async () => {
 
         if (!web3) {
@@ -84,26 +97,22 @@ export const Login = ({ onLoggedIn }: ILogin) => {
         const publicAddress = coinbase.toLowerCase();
         setLoading(true);
 
-        // Check  user publicAddress is already present on backend
-
-        fetch(
-            `${API}/users?publicAddress=${publicAddress}`
-        )
-            .then((response) => response.json())
-            // If yes, retrieve it. If no, create it.
-            .then((users) =>
-                users.length ? users[0] : handleSignup(publicAddress)
-            )
-            // Popup MetaMask confirmation modal to sign message
-            .then(handleSignMessage)
-            // Send signature to backend on the /auth route
-            .then(handleAuthenticate)
-            // Pass accessToken back to parent component (to save it in localStorage)
-            .then(onLoggedIn)
-            .catch((err) => {
-                window.alert(err);
-                setLoading(false);
+        try {
+            const response = await axios.get(`${API}/users`, {
+              params: { publicAddress: publicAddress }
             });
+          
+            const users = response.data;
+
+            const user = users.length ? users[0] : await handleSignup(publicAddress);
+            const signedMessage = await handleSignMessage(user);
+            const accessInfo = await handleAuthenticate(signedMessage);
+            onLoggedIn(accessInfo);
+
+          } catch (err: any) {
+            window.alert(err.message);
+            setLoading(false);
+          }
     };
 
     return (
@@ -115,12 +124,4 @@ export const Login = ({ onLoggedIn }: ILogin) => {
             </span>
         </button>
     );
-    // return (
-    //     <div>
-
-    //         <button className="Login-button Login-mm" onClick={handleClick}>
-    //             {loading ? 'Loading...' : 'Login with MetaMask'}
-    //         </button>
-    //     </div>
-    // );
 };
